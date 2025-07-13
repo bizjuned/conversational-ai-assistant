@@ -1,0 +1,144 @@
+/* frontend/chat-widget/src/index.css */
+
+/* General styling for the body and app container */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  background-color: #f0f4f8;
+}
+
+#root, .app-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.app-container h1 {
+  margin-top: 20px;
+  color: #333;
+}
+
+/* --- Chat Widget Container --- */
+
+.chat-container {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 450px;
+  height: 600px;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  background-color: #fff;
+  overflow: hidden;
+  margin: 20px;
+}
+
+/* --- Messages Display Area --- */
+
+.messages-display {
+  flex-grow: 1;
+  padding: 15px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  background-color: #f9fafb;
+}
+
+/* --- Individual Message Styling --- */
+
+.message {
+  padding: 10px 15px;
+  border-radius: 20px;
+  max-width: 85%;
+  word-wrap: break-word;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* User Message (sent by the user) */
+.message.user {
+  background-color: #007bff;
+  color: #fff;
+  align-self: flex-end;
+  border-bottom-right-radius: 5px;
+}
+
+/* AI Message (sent by the bot) */
+.message.ai {
+  background-color: #e2e8f0;
+  color: #333;
+  align-self: flex-start;
+  border-bottom-left-radius: 5px;
+}
+
+.message strong {
+  margin-right: 5px;
+  color: #555; /* Adjusting color for Bot label */
+}
+
+.message.user strong {
+  color: #fff;
+}
+
+/* Error Message (for streaming issues) */
+.message.error {
+  background-color: #ffebee;
+  color: #d32f2f;
+  align-self: center;
+  text-align: center;
+}
+
+/* Typing indicator/Loader */
+.typing-indicator {
+  align-self: flex-start;
+  padding: 10px;
+  color: #777;
+  font-style: italic;
+  font-size: 14px;
+}
+
+/* --- Input Area --- */
+
+.input-area {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ccc;
+  background-color: #fff;
+}
+
+.input-area input {
+  flex-grow: 1;
+  padding: 10px 15px;
+  border: 1px solid #ddd;
+  border-radius: 25px;
+  font-size: 14px;
+  margin-right: 10px;
+}
+
+.input-area button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 25px;
+  background-color: #007bff;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background-color 0.3s;
+}
+
+.input-area button:hover:enabled {
+  background-color: #0056b3;
+}
+
+/* Styling for disabled button and input during streaming */
+.input-area input:disabled,
+.input-area button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
