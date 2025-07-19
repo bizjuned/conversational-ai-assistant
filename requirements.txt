@@ -10,3 +10,5 @@ elevenlabs
 google-cloud-speech
 PyJWT
 sse-starlette
+redis
+langchain-community

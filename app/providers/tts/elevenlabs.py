@@ -121,7 +121,7 @@ class ElevenLabsTTSProvider(TTSProvider):
             raise ValueError("ELEVENLABS_API_KEY environment variable not set.")
 
         self.client = AsyncElevenLabs(api_key=self.api_key)
-        self.default_voice_id = os.getenv("ELEVEN_LABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+        self.default_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
     async def synthesize(self, text: str) -> AsyncIterator[bytes]:
         try:
@@ -163,7 +163,7 @@ if __name__ == "__main__":
 
     async def run_elevenlabs_test():
         os.environ["ELEVENLABS_API_KEY"] = os.getenv("ELEVENLABS_API_KEY", "YOUR_ELEVEN_LABS_API_KEY_HERE")
-        os.environ["ELEVEN_LABS_VOICE_ID"] = os.getenv("ELEVEN_LABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
+        os.environ["ELEVENLABS_VOICE_ID"] = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 
         print("--- ElevenLabsTTSProvider Test (Standalone) ---")
         try:

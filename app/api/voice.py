@@ -1,39 +1,33 @@
-# app/api/voice.py
-from fastapi import APIRouter # Remove WebSocket, WebSocketDisconnect from import
-from app.services.livekit_service import create_livekit_token
-import uuid
-import logging 
+# backend/app/api/voice.py
+from fastapi import APIRouter, Query, HTTPException
+import logging
+import os
 
-# Remove AssemblyAI/Deepgram and os imports if only used in WS endpoint
-# import assemblyai as aai 
-# import os 
-# from deepgram import DeepgramClient, LiveTranscriptionEvents, LiveOptions # Remove these
+# Import your LiveKit service function
+from app.services.livekit_service import create_livekit_token
 
 router = APIRouter()
-
-# --- Deepgram Configuration (REMOVE from here - moved to main.py) ---
-# DEEPGRAM_API_KEY = os.getenv("DEEPGRAM_API_KEY")
-# if not DEEPGRAM_API_KEY:
-#    logging.error("DEEPGRAM_API_KEY environment variable not set...")
-# else:
-#    pass
-
+logging.basicConfig(level=logging.INFO) # Ensure logging is configured for this module
 
 @router.get("/livekit-token")
-async def get_livekit_token(room_name: str = "ai-voice-bot"):
+async def get_livekit_token(
+    room_name: str = Query(..., description="The name of the LiveKit room to join"),
+    identity: str = Query(None, description="Optional: User identity for the LiveKit token")
+):
     """
-    Generates a LiveKit access token for the client.
+    Generates a LiveKit access token for joining a specific room.
     """
-    identity = str(uuid.uuid4()) 
-    
     try:
-        token = create_livekit_token(room_name, identity) 
-        return {"token": token, "identity": identity}
+        user_identity = identity if identity else f"user_{os.urandom(4).hex()}"
+        
+        token = create_livekit_token(room_name, user_identity)
+        logging.info(f"Generated LiveKit token for room: {room_name}, identity: {user_identity}")
+        return {"token": token}
     except ValueError as e:
-        logging.error(f"Error generating LiveKit token: {e}")
-        return {"error": str(e)}
+        logging.error(f"Configuration error generating LiveKit token: {e}")
+        raise HTTPException(status_code=500, detail=f"Server configuration error: {e}")
+    except Exception as e:
+        logging.error(f"Error generating LiveKit token: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate LiveKit token.")
 
-# --- REMOVE THE ENTIRE WEBSOCKET ENDPOINT FROM THIS FILE! ---
-# @router.websocket("/ws/audio")
-# async def websocket_endpoint(websocket: WebSocket):
-#     # ... (all WebSocket logic including Deepgram, etc.) ...
+# You can add other voice-related endpoints here if needed
