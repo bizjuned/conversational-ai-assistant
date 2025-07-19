@@ -1,75 +1,149 @@
 # app/core/main.py
-from fastapi import FastAPI
+import os
+import logging
+import asyncio
+import sys
+import json
+import base64
+
+# Configure root logger to show INFO messages
+logging.basicConfig(level=logging.INFO)
+
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os
+from sse_starlette.sse import EventSourceResponse
 
-# --- LangChain Imports (Updated for Google Gemini) ---
-from langchain_google_genai import ChatGoogleGenerativeAI 
-from langchain.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
+# Import our provider factory
+from app.providers.factory import get_stt_provider, get_llm_provider, get_tts_provider
 
-# --- API Router Imports ---
-# We import the chat API router from the api/chat.py file.
 from app.api.chat import router as chat_router
+from app.api.voice import router as voice_router
 
-# Load environment variables from .env file
-load_dotenv() 
+from deepgram import LiveOptions, LiveTranscriptionEvents
 
-# Initialize FastAPI
-app = FastAPI(
-    title="Conversational AI Assistant API",
-    description="A stream-based backend for chat and voice AI.",
-    version="0.1.0",
-)
+load_dotenv()
 
-# Configure CORS (essential for embedding the frontend widgets)
-origins = ["*"] 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# --- Initialize Providers using the factory ---
+stt_provider = get_stt_provider()
+llm_provider = get_llm_provider() if (os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY")) else None
+tts_provider = get_tts_provider() if os.getenv("ELEVENLABS_API_KEY") or os.getenv("GOOGLE_API_KEY") else None
 
-# --- LLM and LangChain Setup (Updated to Google Gemini) ---
+# --- NEW DEBUG LINE ---
+logging.info(f"TTS_PROVIDER inside container is: {os.getenv('TTS_PROVIDER')}")
 
-# Retrieve Google API key securely from environment variables.
-google_api_key = os.getenv("GOOGLE_API_KEY")
 
-if not google_api_key:
-    # Handle missing API key gracefully
-    print("Warning: GOOGLE_API_KEY not set. LLM will not function.")
-    llm = None
-else:
-    # Initialize the LLM using ChatGoogleGenerativeAI.
-    # We use 'gemini-1.5-flash' for fast, low-latency responses suitable for streaming.
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
-        google_api_key=google_api_key,
-    )
+app = FastAPI()
+# Using an asyncio.Queue for SSE is generally less ideal for real-time
+# streaming data that maps directly to a WebSocket.
+# For audio, it's often better to send directly over the WebSocket
+# or use a more robust messaging pattern if SSE is truly needed for out-of-band events.
+# For now, we will adapt to send audio chunks via SSE.
+response_queue = asyncio.Queue()
 
-# Define the prompt template
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful AI assistant. You answer questions concisely."),
-    ("user", "{input}")
-])
+# --- SSE Endpoint ---
+@app.get("/api/sse")
+async def sse_endpoint(request: Request):
+    async def event_generator():
+        while True:
+            if await request.is_disconnected():
+                logging.info("SSE client disconnected.")
+                break
+            try:
+                # This queue will now receive JSON strings representing audio chunks or other events
+                response_json = await response_queue.get()
+                yield {"data": response_json}
+            except asyncio.CancelledError:
+                logging.info("SSE event generator cancelled.")
+                break
+            except Exception as e:
+                logging.error(f"Error in SSE event generator: {e}")
+                await asyncio.sleep(1) # Prevent tight loop on error
+    return EventSourceResponse(event_generator())
 
-# Create the LangChain Runnable (LCEL): Prompt -> LLM -> Output Parser
-if llm:
-    chain = prompt | llm | StrOutputParser()
-else:
-    chain = None # The chain will be None if the LLM key is missing
+# --- WebSocket Endpoint ---
+@app.websocket("/api/ws/audio")
+async def websocket_endpoint(websocket: WebSocket):
+    transcriber = None
+    try:
+        await websocket.accept()
+        logging.info("WebSocket connection established.")
 
-# --- API Router Integration ---
+        options = LiveOptions(
+            model="nova-2", punctuate=True, language="en-US",
+            encoding="opus", channels=1, interim_results=False,
+            endpointing=300, smart_format=True
+        )
+        transcriber = stt_provider.get_transcriber(options)
 
-# Include the chat router in the FastAPI app with a prefix of '/api'
+        await transcriber.start(options)
+        logging.info("Connected to STT provider.")
+
+        async def process_transcript_and_respond(transcript: str):
+            if not llm_provider or not tts_provider:
+                logging.warning("LLM or TTS provider not available. Check API keys.")
+                return
+            try:
+                llm_response_text = await llm_provider.generate_response(transcript)
+                logging.info(f"LLM Response: '{llm_response_text}'")
+
+                # --- CRITICAL CHANGE HERE ---
+                # Iterate over the async generator returned by synthesize
+                async for audio_chunk in tts_provider.synthesize(llm_response_text):
+                    if not audio_chunk: # Skip empty chunks
+                        continue
+
+                    # Each audio_chunk is already bytes. Base64 encode it.
+                    encoded_audio_chunk = base64.b64encode(audio_chunk).decode('utf-8')
+
+                    # Prepare payload for each chunk
+                    # You might want to include transcript/LLM response only on the first chunk
+                    # or only when the full transcript is ready.
+                    # For simplicity, sending with each chunk now.
+                    payload = {
+                        "type": "audio_chunk", # Changed type to indicate it's a chunk
+                        "transcript": transcript, # This will be repeated for each chunk
+                        "llm_response_text": llm_response_text, # Also repeated
+                        "audio_chunk": encoded_audio_chunk # Key changed to reflect chunk
+                    }
+                    await response_queue.put(json.dumps(payload))
+                    # Optionally log each chunk sent:
+                    # logging.debug(f"Queued TTS audio chunk of size {len(audio_chunk)} bytes for SSE.")
+
+                logging.info(f"Finished queuing all TTS audio chunks for '{llm_response_text}'.")
+            except Exception as e:
+                logging.error(f"Error during AI processing (TTS or LLM): {e}", exc_info=True) # exc_info for full traceback
+
+        async def on_message(self, result, **kwargs):
+            transcript = result.channel.alternatives[0].transcript
+            if transcript:
+                logging.info(f"STT TRANSCRIPT: '{transcript}'")
+                # Create a task to process the response without blocking the STT transcriber
+                asyncio.create_task(process_transcript_and_respond(transcript))
+
+        transcriber.on(LiveTranscriptionEvents.Transcript, on_message)
+
+        while True:
+            # This loop receives audio from the frontend
+            audio_chunk = await websocket.receive_bytes()
+            if transcriber:
+                await transcriber.send(audio_chunk) # Send to Deepgram STT
+
+    except WebSocketDisconnect:
+        logging.info("Frontend WebSocket disconnected.")
+    except Exception as e:
+        logging.error(f"Unhandled error in WebSocket endpoint: {e}", exc_info=True)
+    finally:
+        if transcriber:
+            await transcriber.finish() # Ensure Deepgram connection is closed
+            logging.info("STT transcriber finished.")
+        logging.info("WebSocket process complete.")
+
+
+# --- Middleware, Routers, and Health Check ---
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 app.include_router(chat_router, prefix="/api")
-
-# --- Endpoints ---
-
+app.include_router(voice_router, prefix="/api")
 @app.get("/")
 async def health_check():
-    """Basic health check endpoint."""
-    return {"status": "ok", "message": "API is operational"}
+    return {"status": "ok"}

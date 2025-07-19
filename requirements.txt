@@ -1,5 +1,12 @@
+# requirements.txt
 fastapi
-uvicorn[standard]
+uvicorn
+python-dotenv
 langchain
-python-dotenv 
+langchain-google-genai
 langchain-openai
+deepgram-sdk
+elevenlabs
+google-cloud-speech
+PyJWT
+sse-starlette
