@@ -12,3 +12,21 @@ PyJWT
 sse-starlette
 redis
 langchain-community
+
+# For RAG - Core components
+chromadb
+langchain-google-gena
+langchain-text-splitters
+tiktoken
+
+# For PGVector (NEW)
+psycopg2-binary
+langchain-community[pgvector]
+
+# For Pinecone (NEW - just the client and langchain integration)
+pinecone-client
+langchain-pinecone
+
+# For Weaviate (NEW - just the client and langchain integration)
+weaviate-client
+langchain-weaviate
