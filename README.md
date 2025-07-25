@@ -66,7 +66,7 @@ State Management: (e.g., React Context, Redux, Zustand) for managing complex app
 
 WebSockets: For efficient real-time communication with the backend for voice streaming and immediate chat responses.
 
-Data Flow & Processing:
+## Data Flow & Processing:
 
 Voice Input: User voice ->  React Frontend (Web Audio API) -> Backend (STT Provider) -> LLM -> Backend (TTS Provider) -> React Frontend (Web Audio API) -> User Voice Output.
 
