@@ -1,4 +1,4 @@
-#AI-Powered Conversational Platform: Bridging Chat, Voice, and Enterprise Automation
+# AI-Powered Conversational Platform: Bridging Chat, Voice, and Enterprise Automation
 
 This project showcases a robust and scalable AI-powered conversational platform, designed for seamless interactions across chat and voice, with deep integration capabilities for enterprise systems. Built with a Python backend and React frontend, it highlights critical capabilities for modern business applications.
 
